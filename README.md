@@ -1,15 +1,8 @@
-# xunfeimsc
+# 讯飞 MSC Flutter 插件
 
-A new flutter plugin project.
+讯飞语音 Flutter 插件包，只支持 Android 平台.
 
-## Getting Started
+## 使用
 
-This project is a starting point for a Flutter
-[plug-in package](https://flutter.dev/developing-packages/),
-a specialized package that includes platform-specific implementation code for
-Android and/or iOS.
 
-For help getting started with Flutter, view our
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
 
