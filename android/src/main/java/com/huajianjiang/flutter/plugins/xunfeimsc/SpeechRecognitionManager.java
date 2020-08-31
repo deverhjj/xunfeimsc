@@ -122,7 +122,7 @@ public class SpeechRecognitionManager {
         // 设置语音前端点:静音超时时间，即用户多长时间不说话则当做超时处理
         speechRecognizer.setParameter(SpeechConstant.VAD_BOS, "5000");
         // 设置语音后端点:后端点静音检测时间，即用户停止说话多长时间内即认为不再输入， 自动停止录音
-        speechRecognizer.setParameter(SpeechConstant.VAD_EOS, "3000");
+        speechRecognizer.setParameter(SpeechConstant.VAD_EOS, "1800");
         // 设置标点符号,设置为"0"返回结果无标点,设置为"1"返回结果有标点
         speechRecognizer.setParameter(SpeechConstant.ASR_PTT,  "1");
         // 设置音频保存路径，保存音频格式支持pcm、wav，设置路径为sd卡请注意WRITE_EXTERNAL_STORAGE权限
@@ -156,8 +156,12 @@ public class SpeechRecognitionManager {
     private RecognizerListener recognizerListener = new RecognizerListener() {
 
         @Override
-        public void onVolumeChanged(int i, byte[] bytes) {
-            Log.d(TAG , "onVolumeChanged");
+        public void onVolumeChanged(int volume, byte[] data) {
+            Log.d(TAG , "onVolumeChanged: "+ volume);
+            Map<Object, Object> eventData = new HashMap<>();
+            eventData.put("volume", volume);
+            eventData.put("data", data);
+            dispatchSuccessEvent("onVolumeChanged", eventData);
         }
 
         @Override
@@ -173,22 +177,23 @@ public class SpeechRecognitionManager {
         }
 
         @Override
-        public void onResult(RecognizerResult recognizerResult, boolean b) {
+        public void onResult(RecognizerResult recognizerResult, boolean islast) {
             Log.d(TAG , "onResult: " + parseRecognitionResult(recognizerResult.getResultString()));
             Map<Object, Object> result = new HashMap<>();
             result.put("result", parseRecognitionResult(recognizerResult.getResultString()));
-            result.put("isLastResult", b);
+            result.put("isLastResult", islast);
             dispatchSuccessEvent("onResult", result);
         }
 
         @Override
         public void onError(SpeechError speechError) {
-            dispatchErrorEvent("RECOGNIZE_FAILED", speechError.getErrorDescription(),
+            dispatchErrorEvent("onSpeechError", speechError.getErrorDescription(),
                     speechError.getErrorCode());
         }
 
         @Override
-        public void onEvent(int i, int i1, int i2, Bundle bundle) {
+        public void onEvent(int eventType, int arg1, int arg2, Bundle bundle) {
+
         }
 
     };

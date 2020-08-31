@@ -2,7 +2,12 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:xunfeimsc/speech_recognition_result.dart';
+
+import 'src/enums/speech_recognition.dart';
+import 'src/models/speech_recognition.dart';
+
+export 'src/enums/speech_recognition.dart';
+export 'src/models/speech_recognition.dart';
 
 class Xunfeimsc {
   static const MethodChannel _callChannel =
@@ -14,19 +19,16 @@ class Xunfeimsc {
   static const String cmd_speech_recognition_stop = "stopSpeechRecognition";
   static const String cmd_speech_recognition_cancel = "cancelSpeechRecognition";
 
-  Stream<Map<dynamic, dynamic>> listenSpeechRecognitionEvent() {
-    return _eventChannel.receiveBroadcastStream();
+  Stream<SpeechRecognizeData> onSpeechRecognitionStateChanged() {
+    return _eventChannel
+        .receiveBroadcastStream()
+        .map((event) => _parseSpeechRecognizeEvent(event));
   }
 
   Stream<SpeechRecognizeResult> onSpeechRecognitionResultAvailable() {
-    return _eventChannel
-        .receiveBroadcastStream()
-        .where((event) => event['eventCode'] == 'onResult')
-        .map((event) {
-      Map<dynamic, dynamic> eventData = event['eventData'];
-      return SpeechRecognizeResult(
-          eventData['result'], eventData['isLastResult']);
-    });
+    return onSpeechRecognitionStateChanged()
+        .where((event) => event.event == SpeechRecognitionEvent.onResult)
+        .map((event) => event.data);
   }
 
   Future<void> startSpeechRecognition() async {
@@ -39,6 +41,34 @@ class Xunfeimsc {
 
   Future<void> cancelSpeechRecognition() async {
     return _callChannel.invokeMethod(cmd_speech_recognition_cancel);
+  }
+
+  SpeechRecognizeData _parseSpeechRecognizeEvent(Map<dynamic, dynamic> event) {
+    String eventCode = event['eventCode'];
+    Map<dynamic, dynamic> eventData = event['eventData'];
+    SpeechRecognizeData data;
+    switch(eventCode) {
+      case 'onStartSpeech':
+        data = SpeechRecognizeData(SpeechRecognitionEvent.onStart, null);
+        break;
+      case 'onFinishSpeech':
+        data = SpeechRecognizeData(SpeechRecognitionEvent.onFinished, null);
+        break;
+      case 'onVolumeChanged':
+        SpeechRecognizeVolume volume =
+        SpeechRecognizeVolume(eventData['volume'], eventData['data']);
+        data =
+            SpeechRecognizeData(SpeechRecognitionEvent.onVolumeChanged, volume);
+        break;
+      case 'onResult':
+        SpeechRecognizeResult result = SpeechRecognizeResult(
+            eventData['result'], eventData['isLastResult']);
+        data = SpeechRecognizeData(SpeechRecognitionEvent.onResult, result);
+        break;
+      default:
+        throw ArgumentError('Unknown event code to handle: $eventCode');
+    }
+    return data;
   }
 
 }

@@ -14,13 +14,30 @@
  * limitations under the License.
  */
 
+import 'dart:typed_data';
+
+import 'package:xunfeimsc/src/enums/speech_recognition.dart';
+
 /// 语言识别接收的数据模型
 class SpeechRecognizeResult {
     /// 识别的内容
-    String content;
+    String result;
     /// 是否是最后一次识别结果
     bool isLastResult;
 
-    SpeechRecognizeResult(this.content, this.isLastResult);
+    SpeechRecognizeResult(this.result, this.isLastResult);
+}
 
+class SpeechRecognizeVolume {
+    int volume;
+    Uint8List data;
+
+    SpeechRecognizeVolume(this.volume, this.data);
+}
+
+class SpeechRecognizeData {
+    SpeechRecognitionEvent event;
+    dynamic data;
+
+    SpeechRecognizeData(this.event, this.data);
 }
