@@ -15,56 +15,89 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  String _platformVersion = 'Unknown';
+  Xunfeimsc _xunfeimsc;
+  StreamSubscription _streamSubscription;
+  String _recognizedText = '';
 
   @override
   void initState() {
     super.initState();
-    initPlatformState();
+    _xunfeimsc = Xunfeimsc();
+    listenSpeechRecognition();
   }
 
-  // Platform messages are asynchronous, so we initialize in an async method.
-  Future<void> initPlatformState() async {
-    String platformVersion;
-    // Platform messages may fail, so we use a try/catch PlatformException.
-    try {
-      platformVersion = await Xunfeimsc.startSpeechRecognition('MainPage');
-    } on PlatformException {
-      platformVersion = 'Failed to get platform version.';
-    }
+  void listenSpeechRecognition() {
+    _streamSubscription =
+        _xunfeimsc.onSpeechRecognitionResultAvailable().listen((event) {
+          if (!mounted) return;
+          setState(() {
+            _recognizedText = '$_recognizedText${event.content}';
+          });
+        });
+  }
 
-    // If the widget was removed from the tree while the asynchronous platform
-    // message was in flight, we want to discard the reply rather than calling
-    // setState to update our non-existent appearance.
-    if (!mounted) return;
-
+  void startSpeechRecognition() {
     setState(() {
-      _platformVersion = platformVersion;
+      _recognizedText = '';
+      _xunfeimsc.startSpeechRecognition();
     });
+  }
+
+  void stopSpeechRecognition() {
+    _xunfeimsc.stopSpeechRecognition();
+  }
+
+  void cancelSpeechRecognition() {
+    _xunfeimsc.cancelSpeechRecognition();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-        home: Builder(builder:(context)
-    {
+    return MaterialApp(home: Builder(builder: (context) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('讯飞 MSC Flutter 插件示例'),
           actions: <Widget>[
             IconButton(
                 icon: Icon(Icons.settings),
-                onPressed: () =>
-                    Navigator.of(context)
+                onPressed: () => Navigator.of(context)
                         .push(MaterialPageRoute(builder: (context) {
                       return SecondaryPage();
                     })))
           ],
         ),
-        body: Center(
-          child: Text('Running on: $_platformVersion\n'),
+        body: Column(
+          children: <Widget>[
+            Expanded(
+                child: Container(
+              padding: EdgeInsets.all(64),
+              child: Text(_recognizedText),
+            )),
+            Padding(
+              padding: EdgeInsets.all(64),
+              child: Row(
+                children: [
+                  RaisedButton(
+                      child: Text('开始'),
+                      onPressed: () => startSpeechRecognition()),
+                  RaisedButton(
+                      child: Text('停止'),
+                      onPressed: () => stopSpeechRecognition()),
+                  RaisedButton(
+                      child: Text('取消'),
+                      onPressed: () => cancelSpeechRecognition())
+                ],
+              ),
+            )
+          ],
         ),
       );
     }));
   }
+
+  void dispose() {
+    _streamSubscription.cancel();
+    super.dispose();
+  }
+
 }

@@ -52,7 +52,7 @@ public class SpeechRecognitionManager {
     private EventChannel.EventSink eventCall;
 
     public SpeechRecognitionManager(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         speechRecognizer = SpeechRecognizer.createRecognizer(context, new InitListener() {
             @Override
             public void onInit(int code) {
@@ -85,22 +85,27 @@ public class SpeechRecognitionManager {
         int retCode = speechRecognizer.startListening(recognizerListener);
         if (retCode != ErrorCode.SUCCESS) {
             resultCall.error("SPEECH_RECOGNITION_FAILED", "Failed to recognize speech.", retCode);
+        } else {
+            resultCall.success(null);
         }
     }
 
     public void stopRecord(MethodChannel.Result resultCall) {
         if (checkState(resultCall)) return;
         speechRecognizer.stopListening();
+        resultCall.success(null);
     }
 
     public void cancel(MethodChannel.Result resultCall) {
         if (checkState(resultCall)) return;
         speechRecognizer.cancel();
+        resultCall.success(null);
     }
 
     public void destroy() {
         eventCall = null;
         if (speechRecognizer != null) {
+            speechRecognizer.cancel();
             speechRecognizer.destroy();
             speechRecognizer = null;
         }
@@ -134,8 +139,12 @@ public class SpeechRecognitionManager {
         return commonResPath + ";" + smsResPath;
     }
 
-    private void dispatchSuccessEvent(Object event) {
+    private void dispatchSuccessEvent(String eventCode, Object eventData) {
         if (eventCall == null) return;
+        Log.d(TAG, "dispatchSuccessEvent: " + eventCode);
+        Map<Object, Object> event = new HashMap<Object, Object>();
+        event.put("eventCode", eventCode);
+        event.put("eventData", eventData);
         eventCall.success(event);
     }
 
@@ -148,24 +157,28 @@ public class SpeechRecognitionManager {
 
         @Override
         public void onVolumeChanged(int i, byte[] bytes) {
+            Log.d(TAG , "onVolumeChanged");
         }
 
         @Override
         public void onBeginOfSpeech() {
-            dispatchSuccessEvent("onStartSpeech");
+            Log.d(TAG , "onBeginOfSpeech");
+            dispatchSuccessEvent("onStartSpeech", null);
         }
 
         @Override
         public void onEndOfSpeech() {
-            dispatchSuccessEvent("onFinishSpeech");
+            Log.d(TAG , "onEndOfSpeech");
+            dispatchSuccessEvent("onFinishSpeech", null);
         }
 
         @Override
         public void onResult(RecognizerResult recognizerResult, boolean b) {
-            Map<String, Object> result = new HashMap<>();
+            Log.d(TAG , "onResult: " + parseRecognitionResult(recognizerResult.getResultString()));
+            Map<Object, Object> result = new HashMap<>();
             result.put("result", parseRecognitionResult(recognizerResult.getResultString()));
             result.put("isLastResult", b);
-            dispatchSuccessEvent(result);
+            dispatchSuccessEvent("onResult", result);
         }
 
         @Override

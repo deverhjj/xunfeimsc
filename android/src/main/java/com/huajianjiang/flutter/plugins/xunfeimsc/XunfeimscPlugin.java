@@ -29,7 +29,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   private static final String TAG = XunfeimscPlugin.class.getSimpleName();
 
   private static final String CHANNEL_METHOD = "com.huajianjiang.flutter.plugins/xunfeimsc";
-  private static final String CHANNEL_EVENT_SPEECH_RECOGNITION = "com.huajianjiang.flutter.plugins/speech_recognition";
+  private static final String CHANNEL_EVENT_SPEECH_RECOGNITION = "com.huajianjiang.flutter.plugins/speech_recognition_event";
   private static final String CMD_SPEECH_RECOGNITION_START = "startSpeechRecognition";
   private static final String CMD_SPEECH_RECOGNITION_STOP = "stopSpeechRecognition";
   private static final String CMD_SPEECH_RECOGNITION_CANCEL= "cancelSpeechRecognition";
@@ -45,6 +45,8 @@ public class XunfeimscPlugin implements FlutterPlugin,
 
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
+
+  private SpeechRecognitionManager speechRecognitionManager;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -66,14 +68,14 @@ public class XunfeimscPlugin implements FlutterPlugin,
     Log.d(TAG, "registerWith");
     final XunfeimscPlugin plugin = new XunfeimscPlugin();
     plugin.onAttachedToEngine(registrar.context(), registrar.messenger());
-    ((Application) registrar.context().getApplicationContext())
-            .registerActivityLifecycleCallbacks(plugin.activityLifecycleObserver);
+    // 注册 Application context 层面的 activity 生命周期监听器
+//    ((Application) registrar.context().getApplicationContext())
+//            .registerActivityLifecycleCallbacks(plugin.activityLifecycleObserver);
   }
 
   private void onAttachedToEngine(Context context, BinaryMessenger messenger) {
     Log.d(TAG, "onAttachedToEngine internal");
-    application = (Application) context;
-    activityLifecycleObserver = new ActivityLifecycleObserver();
+    application = (Application) context.getApplicationContext();
     methodChannel = new MethodChannel(messenger, CHANNEL_METHOD);
     methodChannel.setMethodCallHandler(this);
     eventChannel = new EventChannel(messenger, CHANNEL_EVENT_SPEECH_RECOGNITION);
@@ -85,25 +87,27 @@ public class XunfeimscPlugin implements FlutterPlugin,
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
     Log.d(TAG, "onDetachedFromEngine");
     methodChannel.setMethodCallHandler(null);
+    methodChannel = null;
     eventChannel.setStreamHandler(null);
+    eventChannel = null;
+    // 释放 sdk 占用的系统资源
     Initializer.destroy();
-    application.unregisterActivityLifecycleCallbacks(activityLifecycleObserver);
+//  application.unregisterActivityLifecycleCallbacks(activityLifecycleObserver);
     application = null;
   }
 
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
-    Log.d(TAG, "onMethodCall");
-    Object args = call.arguments();
+    Log.d(TAG, "onMethodCall: " + call.method);
     switch (call.method) {
       case CMD_SPEECH_RECOGNITION_START:
-        result.success("CMD_SPEECH_RECOGNITION_START: " + args.toString());
+        speechRecognitionManager.startRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_STOP:
-        result.success("CMD_SPEECH_RECOGNITION_STOP");
+        speechRecognitionManager.stopRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_CANCEL:
-        result.success("CMD_SPEECH_RECOGNITION_CANCEL");
+        speechRecognitionManager.cancel(result);
         break;
       default:
         result.notImplemented();
@@ -114,18 +118,22 @@ public class XunfeimscPlugin implements FlutterPlugin,
   // event stream
   @Override
   public void onListen(Object arguments, EventChannel.EventSink events) {
-    Log.d(TAG, "onListen");
+    Log.d(TAG, "StreamHandler：onListen");
+    speechRecognitionManager.setEventCall(events);
   }
 
   @Override
   public void onCancel(Object arguments) {
-    Log.d(TAG, "onCancel");
+    Log.d(TAG, "StreamHandler：onCancel");
+    speechRecognitionManager.setEventCall(null);
   }
 
   // activity aware
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
+    speechRecognitionManager = new SpeechRecognitionManager(application);
+    activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
   }
@@ -145,7 +153,10 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
+    speechRecognitionManager.destroy();
+    speechRecognitionManager = null;
     lifecycle.removeObserver(activityLifecycleObserver);
+    activityLifecycleObserver = null;
     lifecycle = null;
   }
 
@@ -191,37 +202,37 @@ public class XunfeimscPlugin implements FlutterPlugin,
 
     @Override
     public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
-      Log.d(TAG, "ActivityLifecycleObserver: onActivityCreated");
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityCreated");
     }
 
     @Override
     public void onActivityStarted(Activity activity) {
-
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityStarted");
     }
 
     @Override
     public void onActivityResumed(Activity activity) {
-
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityResumed");
     }
 
     @Override
     public void onActivityPaused(Activity activity) {
-
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityPaused");
     }
 
     @Override
     public void onActivityStopped(Activity activity) {
-
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityStopped");
     }
 
     @Override
     public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
-
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivitySaveInstanceState");
     }
 
     @Override
     public void onActivityDestroyed(Activity activity) {
-      Log.d(TAG, "ActivityLifecycleObserver: onActivityDestroyed");
+      Log.d(TAG, "ActivityLifecycleObserver-app: onActivityDestroyed");
     }
 
   }
