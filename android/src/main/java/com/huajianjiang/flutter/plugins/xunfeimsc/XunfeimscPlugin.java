@@ -46,7 +46,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
 
-  private SpeechRecognitionManager speechRecognitionManager;
+  private SpeechRecognitionController speechRecognitionController;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -101,13 +101,13 @@ public class XunfeimscPlugin implements FlutterPlugin,
     Log.d(TAG, "onMethodCall: " + call.method);
     switch (call.method) {
       case CMD_SPEECH_RECOGNITION_START:
-        speechRecognitionManager.startRecord(result);
+        speechRecognitionController.startRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_STOP:
-        speechRecognitionManager.stopRecord(result);
+        speechRecognitionController.stopRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_CANCEL:
-        speechRecognitionManager.cancel(result);
+        speechRecognitionController.cancel(result);
         break;
       default:
         result.notImplemented();
@@ -119,20 +119,20 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onListen(Object arguments, EventChannel.EventSink events) {
     Log.d(TAG, "StreamHandler：onListen");
-    speechRecognitionManager.setEventCall(events);
+    speechRecognitionController.setEventCall(events);
   }
 
   @Override
   public void onCancel(Object arguments) {
     Log.d(TAG, "StreamHandler：onCancel");
-    speechRecognitionManager.setEventCall(null);
+    speechRecognitionController.setEventCall(null);
   }
 
   // activity aware
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
-    speechRecognitionManager = new SpeechRecognitionManager(application);
+    speechRecognitionController = new SpeechRecognitionController(application);
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
@@ -153,8 +153,8 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
-    speechRecognitionManager.destroy();
-    speechRecognitionManager = null;
+    speechRecognitionController.destroy();
+    speechRecognitionController = null;
     lifecycle.removeObserver(activityLifecycleObserver);
     activityLifecycleObserver = null;
     lifecycle = null;

@@ -44,14 +44,14 @@ import io.flutter.plugin.common.MethodChannel;
  * <p>Author: Huajian Jiang
  * <br>Email: developer.huajianjiang@gmail.com
  */
-public class SpeechRecognitionManager {
-    private static final String TAG = SpeechRecognitionManager.class.getSimpleName();
+public class SpeechRecognitionController {
+    private static final String TAG = SpeechRecognitionController.class.getSimpleName();
     private Context context;
     private SpeechRecognizer speechRecognizer;
 
     private EventChannel.EventSink eventCall;
 
-    public SpeechRecognitionManager(Context context) {
+    public SpeechRecognitionController(Context context) {
         this.context = context.getApplicationContext();
         speechRecognizer = SpeechRecognizer.createRecognizer(context, new InitListener() {
             @Override

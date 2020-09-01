@@ -56,6 +56,7 @@ class _MyAppState extends State<MyApp> {
       setState(() {
             _recognizedText = '$_recognizedText$recognizedResult';
           });
+
         });
   }
 
@@ -74,7 +75,7 @@ class _MyAppState extends State<MyApp> {
                   children: <Widget>[
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('音量: ${_volume?.volume ?? ''}')
+                    Text('音调: ${_volume?.volume ?? ''}')
                   ],
                 ));
               },
