@@ -8,6 +8,7 @@ import android.os.Environment;
 import android.text.TextUtils;
 
 import com.iflytek.cloud.ErrorCode;
+import com.iflytek.cloud.GrammarListener;
 import com.iflytek.cloud.InitListener;
 import com.iflytek.cloud.RecognizerListener;
 import com.iflytek.cloud.RecognizerResult;
@@ -30,13 +31,13 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.PluginRegistry;
 
 /**
- * 讯飞语音识别控制器
+ * 讯飞语音离线命令词识别控制器
  */
-public class SpeechRecognitionController implements PluginRegistry.RequestPermissionsResultListener {
-    private static final String TAG = SpeechRecognitionController.class.getSimpleName();
+public class ASRController implements PluginRegistry.RequestPermissionsResultListener {
+    private static final String TAG = ASRController.class.getSimpleName();
 
     /**
-     * 语音听写必要的运行时权限
+     * 语音识别必要的运行时权限
      *
      * <ul>音频记录</ul>
      * <ul>音频文件写入外部存储</ul>
@@ -51,7 +52,7 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
     private MethodChannel.Result pendingResultCall;
     private EventChannel.EventSink eventCall;
 
-    public SpeechRecognitionController(Activity activity) {
+    public ASRController(Activity activity) {
         this.activityRef = new WeakReference<>(activity);
         speechRecognizer = SpeechRecognizer.createRecognizer(activity.getApplicationContext(), new InitListener() {
             @Override
@@ -154,7 +155,13 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
         speechRecognizer.setParameter(SpeechConstant.ACCENT,"mandarin");
         speechRecognizer.setParameter(SpeechConstant.ENGINE_TYPE, SpeechConstant.TYPE_LOCAL);
         speechRecognizer.setParameter(SpeechConstant.RESULT_TYPE, "json");
+        speechRecognizer.setParameter(SpeechConstant.TEXT_ENCODING,"utf-8");
         speechRecognizer.setParameter(ResourceUtil.ASR_RES_PATH, getResourcePath());
+        speechRecognizer.setParameter(ResourceUtil.GRM_BUILD_PATH,
+                Environment.getExternalStorageDirectory().getAbsolutePath() + "/msc/grm");
+        speechRecognizer.setParameter(SpeechConstant.LOCAL_GRAMMAR, "call");
+        // 设置识别的门限值
+        speechRecognizer.setParameter(SpeechConstant.MIXED_THRESHOLD, "30");
         // 设置语音前端点:静音超时时间，即用户多长时间不说话则当做超时处理
         speechRecognizer.setParameter(SpeechConstant.VAD_BOS, "5000");
         // 设置语音后端点:后端点静音检测时间，即用户停止说话多长时间内即认为不再输入， 自动停止录音
@@ -164,6 +171,15 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
         // 设置音频保存路径，保存音频格式支持pcm、wav，设置路径为sd卡请注意WRITE_EXTERNAL_STORAGE权限
         speechRecognizer.setParameter(SpeechConstant.AUDIO_FORMAT,"wav");
         speechRecognizer.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/iat.wav");
+        int retCode = speechRecognizer.buildGrammar("bnf", getGrmContent(), new GrammarListener() {
+            @Override
+            public void onBuildFinish(String s, SpeechError speechError) {
+
+            }
+        });
+        if (retCode != ErrorCode.SUCCESS) {
+
+        }
     }
 
     // 解析离线资源文件路径
@@ -173,12 +189,17 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
             return null;
         }
         Context context = activity.getApplicationContext();
-        String commonResPath = ResourceUtil
-                .generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets, "iat/common.jet");
-        String smsResPath = ResourceUtil
-                .generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets,
-                        "iat/sms_16k.jet");
-        return commonResPath + ";" + smsResPath;
+        return ResourceUtil
+                .generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets, "asr/common.jet");
+    }
+
+    private String getGrmContent() {
+        Activity activity = activityRef.get();
+        if (activity == null) {
+            return null;
+        }
+        Context context = activity.getApplicationContext();
+        return Util.readFile(context, "call.bnf");
     }
 
     /**
