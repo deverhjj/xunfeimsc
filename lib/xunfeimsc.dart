@@ -19,26 +19,31 @@ class Xunfeimsc {
   static const String cmd_speech_recognition_stop = "stopSpeechRecognition";
   static const String cmd_speech_recognition_cancel = "cancelSpeechRecognition";
 
+  /// 接收单次语音识别生命周期内所有的事件
   Stream<SpeechRecognizeData> onSpeechRecognitionStateChanged() {
     return _eventChannel
         .receiveBroadcastStream()
         .map((event) => _parseSpeechRecognizeEvent(event));
   }
 
+  /// 接收单次语音识别生命周期内所有的语音识别结果
   Stream<SpeechRecognizeResult> onSpeechRecognitionResultAvailable() {
     return onSpeechRecognitionStateChanged()
         .where((event) => event.event == SpeechRecognitionEvent.onResult)
         .map((event) => event.data);
   }
 
+  /// 开始语音听写
   Future<void> startSpeechRecognition() async {
     return _callChannel.invokeMethod(cmd_speech_recognition_start);
   }
 
+  /// 结束语音听写，结束后会自动执行识别操作
   Future<void> stopSpeechRecognition() async {
     return _callChannel.invokeMethod(cmd_speech_recognition_stop);
   }
 
+  /// 取消语音的录入和识别操作
   Future<void> cancelSpeechRecognition() async {
     return _callChannel.invokeMethod(cmd_speech_recognition_cancel);
   }

@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
+
 import io.flutter.Log;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -22,31 +23,43 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
-/** XunfeimscPlugin */
+/** 讯飞语音 Flutter 插件 */
 public class XunfeimscPlugin implements FlutterPlugin,
         ActivityAware, MethodCallHandler, EventChannel.StreamHandler
 {
   private static final String TAG = XunfeimscPlugin.class.getSimpleName();
 
+  /**
+   * 接收 flutter app 相关的业务调用通道
+   */
   private static final String CHANNEL_METHOD = "com.huajianjiang.flutter.plugins/xunfeimsc";
+  /**
+   * 语音听写事件回调通道，传递给 flutter app 语音听写生命周期内相关的事件
+   */
   private static final String CHANNEL_EVENT_SPEECH_RECOGNITION = "com.huajianjiang.flutter.plugins/speech_recognition_event";
+  /**
+   * 开始语音听写命令
+   */
   private static final String CMD_SPEECH_RECOGNITION_START = "startSpeechRecognition";
+  /**
+   * 停止语音听写命令
+   */
   private static final String CMD_SPEECH_RECOGNITION_STOP = "stopSpeechRecognition";
+  /**
+   * 取消语音听写命令
+   */
   private static final String CMD_SPEECH_RECOGNITION_CANCEL= "cancelSpeechRecognition";
 
   private Application application;
 
-  /// The MethodChannel that will the communication between Flutter and native Android
-  ///
-  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-  /// when the Flutter Engine is detached from the Activity
   private MethodChannel methodChannel;
   private EventChannel eventChannel;
 
+  private ActivityPluginBinding activityPluginBinding;
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
 
-  private SpeechRecognitionController speechRecognitionController;
+  private com.envision.flutter.plugins.xunfeimsc.SpeechRecognitionController speechRecognitionController;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -55,15 +68,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
             flutterPluginBinding.getBinaryMessenger());
   }
 
-  // This static function is optional and equivalent to onAttachedToEngine. It supports the old
-  // pre-Flutter-1.12 Android projects. You are encouraged to continue supporting
-  // plugin registration via this function while apps migrate to use the new Android APIs
-  // post-flutter-1.12 via https://flutter.dev/go/android-project-migration.
-  //
-  // It is encouraged to share logic between onAttachedToEngine and registerWith to keep
-  // them functionally equivalent. Only one of onAttachedToEngine or registerWith will be called
-  // depending on the user's project. onAttachedToEngine or registerWith must both be defined
-  // in the same class.
+  // 向后兼容
   public static void registerWith(Registrar registrar) {
     Log.d(TAG, "registerWith");
     final XunfeimscPlugin plugin = new XunfeimscPlugin();
@@ -73,6 +78,11 @@ public class XunfeimscPlugin implements FlutterPlugin,
 //            .registerActivityLifecycleCallbacks(plugin.activityLifecycleObserver);
   }
 
+  /**
+   * 初始化配置
+   * @param context 上下文
+   * @param messenger 通道消息信使
+   */
   private void onAttachedToEngine(Context context, BinaryMessenger messenger) {
     Log.d(TAG, "onAttachedToEngine internal");
     application = (Application) context.getApplicationContext();
@@ -80,6 +90,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
     methodChannel.setMethodCallHandler(this);
     eventChannel = new EventChannel(messenger, CHANNEL_EVENT_SPEECH_RECOGNITION);
     eventChannel.setStreamHandler(this);
+    // 初始化 sdk
     Initializer.initSDK(context);
   }
 
@@ -128,11 +139,14 @@ public class XunfeimscPlugin implements FlutterPlugin,
     speechRecognitionController.setEventCall(null);
   }
 
-  // activity aware
+  // 插件运行时关联的 activity 生命周期回调
+
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
-    speechRecognitionController = new SpeechRecognitionController(application);
+    activityPluginBinding = binding;
+    speechRecognitionController = new com.envision.flutter.plugins.xunfeimsc.SpeechRecognitionController(binding.getActivity());
+    binding.addRequestPermissionsResultListener(speechRecognitionController);
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
@@ -153,6 +167,8 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
+    activityPluginBinding.removeRequestPermissionsResultListener(speechRecognitionController);
+    activityPluginBinding = null;
     speechRecognitionController.destroy();
     speechRecognitionController = null;
     lifecycle.removeObserver(activityLifecycleObserver);
@@ -160,8 +176,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
     lifecycle = null;
   }
 
-
-  // activity lifecycle
+  // activity 生命周期监听器
   private static class ActivityLifecycleObserver
           implements DefaultLifecycleObserver, Application.ActivityLifecycleCallbacks
   {
