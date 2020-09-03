@@ -3,13 +3,18 @@ package com.huajianjiang.flutter.plugins.xunfeimsc;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.text.TextUtils;
+import android.widget.Toast;
 
 import com.iflytek.cloud.ErrorCode;
 import com.iflytek.cloud.GrammarListener;
 import com.iflytek.cloud.InitListener;
+import com.iflytek.cloud.LexiconListener;
 import com.iflytek.cloud.RecognizerListener;
 import com.iflytek.cloud.RecognizerResult;
 import com.iflytek.cloud.SpeechConstant;
@@ -19,10 +24,10 @@ import com.iflytek.cloud.util.ResourceUtil;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.flutter.Log;
@@ -159,9 +164,10 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         speechRecognizer.setParameter(ResourceUtil.ASR_RES_PATH, getResourcePath());
         speechRecognizer.setParameter(ResourceUtil.GRM_BUILD_PATH,
                 Environment.getExternalStorageDirectory().getAbsolutePath() + "/msc/grm");
-        speechRecognizer.setParameter(SpeechConstant.LOCAL_GRAMMAR, "call");
+        speechRecognizer.setParameter(SpeechConstant.LOCAL_GRAMMAR, "openApp");
+        speechRecognizer.setParameter(SpeechConstant.GRAMMAR_LIST, "openApp");
         // 设置识别的门限值
-        speechRecognizer.setParameter(SpeechConstant.MIXED_THRESHOLD, "30");
+        speechRecognizer.setParameter(SpeechConstant.MIXED_THRESHOLD, "60");
         // 设置语音前端点:静音超时时间，即用户多长时间不说话则当做超时处理
         speechRecognizer.setParameter(SpeechConstant.VAD_BOS, "5000");
         // 设置语音后端点:后端点静音检测时间，即用户停止说话多长时间内即认为不再输入， 自动停止录音
@@ -183,6 +189,71 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
                 }
             }
         });
+
+        getApps();
+        speechRecognizer.updateLexicon("app", getAppNames(), new LexiconListener() {
+            @Override
+            public void onLexiconUpdated(String s, SpeechError speechError) {
+                if (speechError != null) {
+                    Log.e(TAG, "SpeechRecognition onLexiconUpdated failed：" + speechError.getErrorDescription());
+                } else {
+                    Log.d(TAG, "SpeechRecognition onLexiconUpdated success：" + s);
+                }
+            }
+        });
+    }
+
+    private String getAppNames() {
+        StringBuilder names = new StringBuilder();
+        for (String name : appMap.values()) {
+            names.append(name).append("\n");
+        }
+        return names.toString();
+    }
+
+    private Map<String, String> appMap = new HashMap<>();
+    private void getApps() {
+        if (!appMap.isEmpty()) return;
+        Activity activity = activityRef.get();
+        if (activity == null) {
+            return;
+        }
+        PackageManager pm = activity.getPackageManager();
+        List<PackageInfo> packageInfos = pm
+                .getInstalledPackages(PackageManager.GET_ACTIVITIES);
+        for (PackageInfo pi : packageInfos) {
+            CharSequence label = pm.getApplicationLabel(pi.applicationInfo);
+            if (!TextUtils.isEmpty(label)) {
+                appMap.put(pi.packageName, label.toString());
+            }
+        }
+        Log.d(TAG, "getApps: " + appMap.toString());
+    }
+
+    private void oppApp(String app) {
+        Activity activity = activityRef.get();
+        if (activity == null) {
+            return;
+        }
+        PackageManager pm = activity.getPackageManager();
+
+        String pkgName = null;
+        for (Map.Entry<String, String> entry : appMap.entrySet()) {
+            if (entry.getValue().equals(app)) {
+                pkgName = entry.getKey();
+                break;
+            }
+        }
+        if (pkgName == null) {
+            Toast.makeText(activity, "打开失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = pm.getLaunchIntentForPackage(pkgName);
+        if (intent != null) {
+            activity.startActivity(intent);
+        } else {
+            Toast.makeText(activity, "打开失败", Toast.LENGTH_SHORT).show();
+        }
     }
 
     // 解析离线资源文件路径
@@ -192,8 +263,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
             return null;
         }
         Context context = activity.getApplicationContext();
-        return ResourceUtil
-                .generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets, "asr/common.jet");
+        return ResourceUtil.generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets, "asr/common.jet");
     }
 
     private String getGrmContent() {
@@ -202,7 +272,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
             return null;
         }
         Context context = activity.getApplicationContext();
-        return Util.readFile(context, "call.bnf");
+        return Util.readFile(context, "open_app.bnf");
     }
 
     /**
@@ -270,6 +340,11 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
             String jsonResult = recognizerResult.getResultString();
             if (TextUtils.isEmpty(jsonResult)) return;
             String parsedResult = parseRecognitionResult(jsonResult);
+            if (TextUtils.isEmpty(parsedResult)) {
+                parsedResult = "没有匹配结果";
+            } else {
+                oppApp(parsedResult);
+            }
             Log.d(TAG, "onResult: " + parsedResult);
             Map<Object, Object> result = new HashMap<>();
             result.put("result", parsedResult);
@@ -293,45 +368,29 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
     };
 
     private static String parseRecognitionResult(String json) {
-        StringBuilder ret = new StringBuilder();
+        Log.d(TAG, "parseRecognitionResult: input: " + json);
+        String target = "";
         try {
-            JSONTokener tokener = new JSONTokener(json);
-            JSONObject joResult = new JSONObject(tokener);
+            JSONObject joResult = new JSONObject(json);
             JSONArray words = joResult.getJSONArray("ws");
             for (int i = 0; i < words.length(); i++) {
                 JSONObject wsItem = words.getJSONObject(i);
+                String slot = wsItem.getString("slot");
+
                 JSONArray items = wsItem.getJSONArray("cw");
-                if ("<contact>".equals(wsItem.getString("slot"))) {
-                    // 可能会有多个联系人供选择，用中括号括起来，这些候选项具有相同的置信度
-                    ret.append("【");
-                    for(int j = 0; j < items.length(); j++)
-                    {
-                        JSONObject obj = items.getJSONObject(j);
-                        if(obj.getString("w").contains("nomatch"))
-                        {
-                            ret.append("没有匹配结果.");
-                            return ret.toString();
-                        }
-                        ret.append(obj.getString("w")).append("|");
-                    }
-                    ret.setCharAt(ret.length() - 1, '】');
-                } else {
-                    //本地多候选按照置信度高低排序，一般选取第一个结果即可
-                    JSONObject obj = items.getJSONObject(0);
-                    if(obj.getString("w").contains("nomatch"))
-                    {
-                        ret.append("没有匹配结果.");
-                        return ret.toString();
-                    }
-                    ret.append(obj.getString("w"));
+                JSONObject obj = items.getJSONObject(0);
+                String w = obj.getString("w");
+                int sc = obj.getInt("sc");
+
+                if (!w.contains("nomatch") && slot.equals("<app>") && sc > 60) {
+                    target = w;
+                    break;
                 }
             }
-            ret.append("【置信度】" + joResult.getInt("sc"));
-            ret.append("\n");
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return ret.toString();
+        return target;
     }
 
     @Override
