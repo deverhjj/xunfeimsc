@@ -59,7 +59,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
 
-  private SpeechRecognitionController speechRecognitionController;
+  private ASRController speechRecognitionController;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -145,7 +145,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
     activityPluginBinding = binding;
-    speechRecognitionController = new SpeechRecognitionController(binding.getActivity());
+    speechRecognitionController = new ASRController(binding.getActivity());
     binding.addRequestPermissionsResultListener(speechRecognitionController);
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);

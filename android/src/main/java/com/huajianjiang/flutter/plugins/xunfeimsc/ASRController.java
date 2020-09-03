@@ -170,16 +170,19 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         speechRecognizer.setParameter(SpeechConstant.ASR_PTT,  "1");
         // 设置音频保存路径，保存音频格式支持pcm、wav，设置路径为sd卡请注意WRITE_EXTERNAL_STORAGE权限
         speechRecognizer.setParameter(SpeechConstant.AUDIO_FORMAT,"wav");
-        speechRecognizer.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/iat.wav");
-        int retCode = speechRecognizer.buildGrammar("bnf", getGrmContent(), new GrammarListener() {
-            @Override
-            public void onBuildFinish(String s, SpeechError speechError) {
+        speechRecognizer.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
 
+        // 编译语法并写入本地存储
+        speechRecognizer.buildGrammar("bnf", getGrmContent(), new GrammarListener() {
+            @Override
+            public void onBuildFinish(String grmId, SpeechError speechError) {
+                if (speechError != null) {
+                    Log.e(TAG, "SpeechRecognition buildGrammar failed：" + speechError.getErrorDescription());
+                } else {
+                    Log.d(TAG, "SpeechRecognition buildGrammar success：" + grmId);
+                }
             }
         });
-        if (retCode != ErrorCode.SUCCESS) {
-
-        }
     }
 
     // 解析离线资源文件路径
@@ -216,6 +219,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         eventCall.success(event);
     }
 
+    @SuppressWarnings("SameParameterValue")
     private void dispatchErrorEvent(String errorCode, String errorMessage, Object errorDetails) {
         if (eventCall == null) return;
         eventCall.error(errorCode, errorMessage, errorDetails);
@@ -295,11 +299,35 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
             JSONObject joResult = new JSONObject(tokener);
             JSONArray words = joResult.getJSONArray("ws");
             for (int i = 0; i < words.length(); i++) {
-                // 转写结果词，默认使用第一个结果
-                JSONArray items = words.getJSONObject(i).getJSONArray("cw");
-                JSONObject obj = items.getJSONObject(0);
-                ret.append(obj.getString("w"));
+                JSONObject wsItem = words.getJSONObject(i);
+                JSONArray items = wsItem.getJSONArray("cw");
+                if ("<contact>".equals(wsItem.getString("slot"))) {
+                    // 可能会有多个联系人供选择，用中括号括起来，这些候选项具有相同的置信度
+                    ret.append("【");
+                    for(int j = 0; j < items.length(); j++)
+                    {
+                        JSONObject obj = items.getJSONObject(j);
+                        if(obj.getString("w").contains("nomatch"))
+                        {
+                            ret.append("没有匹配结果.");
+                            return ret.toString();
+                        }
+                        ret.append(obj.getString("w")).append("|");
+                    }
+                    ret.setCharAt(ret.length() - 1, '】');
+                } else {
+                    //本地多候选按照置信度高低排序，一般选取第一个结果即可
+                    JSONObject obj = items.getJSONObject(0);
+                    if(obj.getString("w").contains("nomatch"))
+                    {
+                        ret.append("没有匹配结果.");
+                        return ret.toString();
+                    }
+                    ret.append(obj.getString("w"));
+                }
             }
+            ret.append("【置信度】" + joResult.getInt("sc"));
+            ret.append("\n");
         } catch (Exception e) {
             e.printStackTrace();
         }

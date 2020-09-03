@@ -1,0 +1,8 @@
+#BNF+IAT 1.0 UTF-8;
+!grammar openApp;
+!slot <app>;
+!slot <open>;
+!start <openAppStart>;
+<openAppStart>:<open><app>;
+<app>:QQ;
+<open>:打开;
