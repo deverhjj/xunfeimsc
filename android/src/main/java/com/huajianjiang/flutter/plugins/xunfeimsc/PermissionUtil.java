@@ -14,7 +14,6 @@ import androidx.core.content.ContextCompat;
  * 权限处理工具类
  */
 public class PermissionUtil {
-    private static final int REQUEST_PERM = 1;
 
     private PermissionUtil(){}
 
@@ -64,19 +63,19 @@ public class PermissionUtil {
      * @param context 调用请求的对象
      * @param permissions 请求的权限
      */
-    public static void requestPermissions(Object context, String[] permissions) {
+    public static void requestPermissions(Object context, int requestCode, String[] permissions) {
         //检查权限请求所在的上下文环境
         if (context instanceof Activity) {
             // 权限请求所在上下文为 Framework 中的 Activity 或者 androidx 中的 Activity
             // (FragmentActivity/AppCompatActivity)
-            ActivityCompat.requestPermissions((Activity) context, permissions, REQUEST_PERM);
+            ActivityCompat.requestPermissions((Activity) context, permissions, requestCode);
         } else if (context instanceof androidx.fragment.app.Fragment) {
             // androidx Fragment
             ((androidx.fragment.app.Fragment) context)
-                    .requestPermissions(permissions, REQUEST_PERM);
+                    .requestPermissions(permissions, requestCode);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // Framework 中的 Fragment
-            ((android.app.Fragment) context).requestPermissions(permissions, REQUEST_PERM);
+            ((android.app.Fragment) context).requestPermissions(permissions, requestCode);
         } else {
             throw new RuntimeException("Can not find correct context for permissions request");
         }

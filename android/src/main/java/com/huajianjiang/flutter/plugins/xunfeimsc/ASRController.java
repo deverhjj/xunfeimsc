@@ -40,15 +40,16 @@ import io.flutter.plugin.common.PluginRegistry;
  */
 public class ASRController implements PluginRegistry.RequestPermissionsResultListener {
     private static final String TAG = ASRController.class.getSimpleName();
-
+    private static final int RQ_PRM_RECORD = 0x1;
     /**
-     * 语音识别必要的运行时权限
+     * 语音识别必要的 6.0+ 运行时权限
      *
      * <ul>音频记录</ul>
      * <ul>音频文件写入外部存储</ul>
      */
     private static final String[] REQUIRED_PERMISSIONS = {
-            Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
 
     private WeakReference<Activity> activityRef;
@@ -82,15 +83,21 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         return !isOk;
     }
 
-    private boolean requestPermissions() {
+    /**
+     * 操作前的权限请求，如果没有被授权，自动请求权限
+     * @param requestCode 请求码
+     * @return 被拒 true，否则 false
+     */
+    @SuppressWarnings("SameParameterValue")
+    private boolean requestPermissions(int requestCode) {
         Activity activity = activityRef.get();
         if (activity == null) {
-            return false;
+            return true;
         }
         boolean permissionsDenied = !PermissionUtil
                 .verifyAllPermissions(activity, REQUIRED_PERMISSIONS);
         if (permissionsDenied) {
-            PermissionUtil.requestPermissions(activity, REQUIRED_PERMISSIONS);
+            PermissionUtil.requestPermissions(activity, requestCode, REQUIRED_PERMISSIONS);
         }
         return permissionsDenied;
     }
@@ -102,7 +109,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
     public void startRecord(MethodChannel.Result resultCall) {
         pendingResultCall = resultCall;
         if (checkState(resultCall)) return;
-        if (requestPermissions()) return;
+        if (requestPermissions(RQ_PRM_RECORD)) return;
         if (speechRecognizer.isListening()) {
             resultCall.error("INVALID_STATE", "Can not start a new record when in recording.", null);
             return;
@@ -155,6 +162,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
      */
     private void setup() {
         if (speechRecognizer == null) return;
+
         speechRecognizer.setParameter(SpeechConstant.PARAMS, null);
         speechRecognizer.setParameter(SpeechConstant.LANGUAGE, "zh_cn");
         speechRecognizer.setParameter(SpeechConstant.ACCENT,"mandarin");
@@ -178,6 +186,10 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         speechRecognizer.setParameter(SpeechConstant.AUDIO_FORMAT,"wav");
         speechRecognizer.setParameter(SpeechConstant.ASR_AUDIO_PATH, Environment.getExternalStorageDirectory() + "/msc/asr.wav");
 
+        getApps();
+    }
+
+    private void compileGrammar() {
         // 编译语法并写入本地存储
         speechRecognizer.buildGrammar("bnf", getGrmContent(), new GrammarListener() {
             @Override
@@ -190,7 +202,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
             }
         });
 
-        getApps();
+        // 更新啊 app 词典
         speechRecognizer.updateLexicon("app", getAppNames(), new LexiconListener() {
             @Override
             public void onLexiconUpdated(String s, SpeechError speechError) {
@@ -203,6 +215,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         });
     }
 
+    // 每个 app label 一行
     private String getAppNames() {
         StringBuilder names = new StringBuilder();
         for (String name : appMap.values()) {
@@ -211,6 +224,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
         return names.toString();
     }
 
+    // packageName -> label
     private Map<String, String> appMap = new HashMap<>();
     private void getApps() {
         if (!appMap.isEmpty()) return;
@@ -382,7 +396,7 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
                 String w = obj.getString("w");
                 int sc = obj.getInt("sc");
 
-                if (!w.contains("nomatch") && slot.equals("<app>") && sc > 60) {
+                if (!w.contains("nomatch") && slot.equals("<app>") && sc > 0) {
                     target = w;
                     break;
                 }
@@ -397,7 +411,10 @@ public class ASRController implements PluginRegistry.RequestPermissionsResultLis
     public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         // 必要的权限被授予后自动继续上次的操作
         if (PermissionUtil.verifyAllPermissionRequestResult(grantResults)) {
-            startRecord(pendingResultCall);
+            if (requestCode == RQ_PRM_RECORD) {
+                compileGrammar();
+                startRecord(pendingResultCall);
+            }
         } else {
             // 权限被拒，抛出异常，flutter 层处理相关逻辑，显示友好的 UI 提示
             pendingResultCall.error("PERMISSION_DENIED", "Required permissions denied", null);

@@ -146,6 +146,7 @@ class _MyAppState extends State<MyApp> {
                   Padding(
                     padding: EdgeInsets.all(64),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         RaisedButton(
                             child: Text('开始'),
