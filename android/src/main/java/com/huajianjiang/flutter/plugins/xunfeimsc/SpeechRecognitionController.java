@@ -34,7 +34,7 @@ import io.flutter.plugin.common.PluginRegistry;
  */
 public class SpeechRecognitionController implements PluginRegistry.RequestPermissionsResultListener {
     private static final String TAG = SpeechRecognitionController.class.getSimpleName();
-
+    private static final int RQ_PRM_RECORD = 0x1;
     /**
      * 语音听写必要的运行时权限
      *
@@ -76,15 +76,21 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
         return !isOk;
     }
 
-    private boolean requestPermissions() {
+    /**
+     * 操作前的权限请求，如果没有被授权，自动请求权限
+     * @param requestCode 请求码
+     * @return 被拒 true，否则 false
+     */
+    @SuppressWarnings("SameParameterValue")
+    private boolean requestPermissions(int requestCode) {
         Activity activity = activityRef.get();
         if (activity == null) {
-            return false;
+            return true;
         }
         boolean permissionsDenied = !PermissionUtil
                 .verifyAllPermissions(activity, REQUIRED_PERMISSIONS);
         if (permissionsDenied) {
-            PermissionUtil.requestPermissions(activity, REQUIRED_PERMISSIONS);
+            PermissionUtil.requestPermissions(activity, requestCode, REQUIRED_PERMISSIONS);
         }
         return permissionsDenied;
     }
@@ -96,7 +102,7 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
     public void startRecord(MethodChannel.Result resultCall) {
         pendingResultCall = resultCall;
         if (checkState(resultCall)) return;
-        if (requestPermissions()) return;
+        if (requestPermissions(RQ_PRM_RECORD)) return;
         if (speechRecognizer.isListening()) {
             resultCall.error("INVALID_STATE", "Can not start a new record when in recording.", null);
             return;
@@ -289,7 +295,9 @@ public class SpeechRecognitionController implements PluginRegistry.RequestPermis
     public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         // 必要的权限被授予后自动继续上次的操作
         if (PermissionUtil.verifyAllPermissionRequestResult(grantResults)) {
-            startRecord(pendingResultCall);
+            if (requestCode == RQ_PRM_RECORD) {
+                startRecord(pendingResultCall);
+            }
         } else {
             // 权限被拒，抛出异常，flutter 层处理相关逻辑，显示友好的 UI 提示
             pendingResultCall.error("PERMISSION_DENIED", "Required permissions denied", null);

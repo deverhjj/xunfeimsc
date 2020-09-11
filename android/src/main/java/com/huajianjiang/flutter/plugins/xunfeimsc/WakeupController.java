@@ -1,69 +1,48 @@
 package com.huajianjiang.flutter.plugins.xunfeimsc;
 
-import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Environment;
 import android.text.TextUtils;
 
 import com.iflytek.cloud.ErrorCode;
-import com.iflytek.cloud.GrammarListener;
 import com.iflytek.cloud.InitListener;
 import com.iflytek.cloud.RecognizerResult;
 import com.iflytek.cloud.SpeechConstant;
 import com.iflytek.cloud.SpeechError;
 import com.iflytek.cloud.SpeechEvent;
-import com.iflytek.cloud.SpeechRecognizer;
 import com.iflytek.cloud.VoiceWakeuper;
 import com.iflytek.cloud.WakeuperListener;
 import com.iflytek.cloud.WakeuperResult;
 import com.iflytek.cloud.util.ResourceUtil;
 
-import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
 
 import io.flutter.Log;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.common.PluginRegistry;
 
 /**
  * 讯飞语音离线命令词识别控制器
  */
-public class WakeupController implements PluginRegistry.RequestPermissionsResultListener {
+public class WakeupController {
     private static final String TAG = WakeupController.class.getSimpleName();
-    private static final int RQ_PRM_RECORD = 0x1;
-    /**
-     * 语音识别必要的 6.0+ 运行时权限
-     *
-     * <ul>音频记录</ul>
-     * <ul>音频文件写入外部存储</ul>
-     */
-    private static final String[] REQUIRED_PERMISSIONS = {
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-    };
-
-    private WeakReference<Activity> activityRef;
-    private SpeechRecognizer speechRecognizer;
+    private Context appContext;
     private VoiceWakeuper voiceWakeuper;
 
-    private MethodChannel.Result pendingResultCall;
     private EventChannel.EventSink eventCall;
 
-    public WakeupController(Activity activity) {
-        this.activityRef = new WeakReference<>(activity);
-        speechRecognizer = SpeechRecognizer.createRecognizer(activity.getApplicationContext(), new InitListener() {
-            @Override
-            public void onInit(int code) {
-                if (code != ErrorCode.SUCCESS) {
-                    Log.e(TAG, "SpeechRecognition init failed.");
-                }
-            }
-        });
-        voiceWakeuper = VoiceWakeuper.createWakeuper(activity, new InitListener() {
+    public WakeupController(Context context) {
+        appContext = context.getApplicationContext();
+        init();
+    }
+
+    /**
+     * 配置语音听写参数
+     */
+    private void init() {
+        voiceWakeuper = VoiceWakeuper.createWakeuper(appContext, new InitListener() {
             @Override
             public void onInit(int code) {
                 if (code != ErrorCode.SUCCESS) {
@@ -71,7 +50,17 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
                 }
             }
         });
-        setup();
+        if (voiceWakeuper != null) {
+            voiceWakeuper.setParameter(SpeechConstant.PARAMS, null);
+            voiceWakeuper.setParameter(SpeechConstant.ENGINE_TYPE, SpeechConstant.TYPE_LOCAL);
+            voiceWakeuper.setParameter(ResourceUtil.IVW_RES_PATH, getResourcePath("ivw/" + Initializer.APP_ID + ".jet"));
+            voiceWakeuper.setParameter(SpeechConstant.IVW_THRESHOLD, "0:" + 1450);
+            voiceWakeuper.setParameter(SpeechConstant.IVW_SST, "wakeup");
+            voiceWakeuper.setParameter(SpeechConstant.KEEP_ALIVE, "0");
+            voiceWakeuper.setParameter(SpeechConstant.RESULT_TYPE, "json");
+            voiceWakeuper.setParameter(SpeechConstant.IVW_AUDIO_PATH, Environment.getExternalStorageDirectory().getPath() + "/msc/ivw.wav");
+            voiceWakeuper.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
+        }
     }
 
     public void setEventCall(EventChannel.EventSink eventCall) {
@@ -79,7 +68,7 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
     }
 
     private boolean checkState(MethodChannel.Result resultCall) {
-        boolean isOk = speechRecognizer != null && voiceWakeuper != null;
+        boolean isOk = voiceWakeuper != null;
         if (!isOk) {
             resultCall.error("INIT_FAILED", "SpeechRecognition init failed.", null);
         }
@@ -87,32 +76,11 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
     }
 
     /**
-     * 操作前的权限请求，如果没有被授权，自动请求权限
-     * @param requestCode 请求码
-     * @return 被拒 true，否则 false
-     */
-    @SuppressWarnings("SameParameterValue")
-    private boolean requestPermissions(int requestCode) {
-        Activity activity = activityRef.get();
-        if (activity == null) {
-            return true;
-        }
-        boolean permissionsDenied = !PermissionUtil
-                .verifyAllPermissions(activity, REQUIRED_PERMISSIONS);
-        if (permissionsDenied) {
-            PermissionUtil.requestPermissions(activity, requestCode, REQUIRED_PERMISSIONS);
-        }
-        return permissionsDenied;
-    }
-
-    /**
      * 开始录音并动态识别
      * @param resultCall 本此调用结果回调
      */
     public void startRecord(MethodChannel.Result resultCall) {
-        pendingResultCall = resultCall;
         if (checkState(resultCall)) return;
-        if (requestPermissions(RQ_PRM_RECORD)) return;
         if (voiceWakeuper.isListening()) {
             resultCall.error("INVALID_STATE", "Can not start a new record when in recording.", null);
             return;
@@ -149,15 +117,7 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
      * 释放所有的资源
      */
     public void destroy() {
-        pendingResultCall = null;
         eventCall = null;
-        activityRef.clear();
-        activityRef = null;
-        if (speechRecognizer != null) {
-            speechRecognizer.cancel();
-            speechRecognizer.destroy();
-            speechRecognizer = null;
-        }
         if (voiceWakeuper != null) {
             voiceWakeuper.cancel();
             voiceWakeuper.destroy();
@@ -165,66 +125,12 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
         }
     }
 
-    /**
-     * 配置语音听写参数
-     */
-    private void setup() {
-        if (speechRecognizer != null) {
-            speechRecognizer.setParameter(SpeechConstant.PARAMS, null);
-            speechRecognizer.setParameter(SpeechConstant.ENGINE_TYPE, SpeechConstant.TYPE_LOCAL);
-            speechRecognizer.setParameter(SpeechConstant.TEXT_ENCODING,"utf-8");
-            speechRecognizer.setParameter(ResourceUtil.ASR_RES_PATH, getResourcePath("asr/common.jet"));
-            speechRecognizer.setParameter(ResourceUtil.GRM_BUILD_PATH,
-                    Environment.getExternalStorageDirectory().getAbsolutePath() + "/msc/grm");
-        }
-        if (voiceWakeuper != null) {
-            voiceWakeuper.setParameter(SpeechConstant.PARAMS, null);
-            voiceWakeuper.setParameter(SpeechConstant.ENGINE_TYPE, SpeechConstant.TYPE_LOCAL);
-            voiceWakeuper.setParameter(ResourceUtil.IVW_RES_PATH, getResourcePath("ivw/" + Initializer.APP_ID + ".jet"));
-            voiceWakeuper.setParameter(SpeechConstant.IVW_THRESHOLD, "0:" + 1450);
-            voiceWakeuper.setParameter(SpeechConstant.IVW_SST, "oneshot");
-            voiceWakeuper.setParameter(SpeechConstant.RESULT_TYPE, "json");
-            voiceWakeuper.setParameter(SpeechConstant.IVW_AUDIO_PATH, Environment.getExternalStorageDirectory().getPath() + "/msc/ivw.wav");
-            voiceWakeuper.setParameter(SpeechConstant.AUDIO_FORMAT, "wav");
-            voiceWakeuper.setParameter(ResourceUtil.ASR_RES_PATH,
-                    getResourcePath("asr/common.jet"));
-            voiceWakeuper.setParameter(ResourceUtil.GRM_BUILD_PATH, Environment.getExternalStorageDirectory().getAbsolutePath() + "/msc/grm");
-            voiceWakeuper.setParameter(SpeechConstant.LOCAL_GRAMMAR, "wake");
-        }
-    }
-
-    private void compileGrammar() {
-        // 编译语法并写入本地存储
-        speechRecognizer.buildGrammar("bnf", getGrmContent(), new GrammarListener() {
-            @Override
-            public void onBuildFinish(String grmId, SpeechError speechError) {
-                if (speechError != null) {
-                    Log.e(TAG, "SpeechRecognition buildGrammar failed：" + speechError.getErrorDescription());
-                } else {
-                    Log.d(TAG, "SpeechRecognition buildGrammar success：" + grmId);
-                }
-            }
-        });
-    }
 
 
     // 解析离线资源文件路径
+    @SuppressWarnings("SameParameterValue")
     private String getResourcePath(String res) {
-        Activity activity = activityRef.get();
-        if (activity == null) {
-            return null;
-        }
-        Context context = activity.getApplicationContext();
-        return ResourceUtil.generateResourcePath(context, ResourceUtil.RESOURCE_TYPE.assets, res);
-    }
-
-    private String getGrmContent() {
-        Activity activity = activityRef.get();
-        if (activity == null) {
-            return null;
-        }
-        Context context = activity.getApplicationContext();
-        return Util.readFile(context, "wake.bnf");
+        return ResourceUtil.generateResourcePath(appContext, ResourceUtil.RESOURCE_TYPE.assets, res);
     }
 
     /**
@@ -270,7 +176,7 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
 
         @Override
         public void onEvent(int eventType, int isLast, int arg2, Bundle obj) {
-            Log.d(TAG, "eventType:" + eventType + "arg1:" + isLast + "arg2:" + arg2);
+            Log.d(TAG, "eventType:" + eventType + ", isLast: " + isLast + ", arg2: " + arg2);
             // 识别结果
             if (SpeechEvent.EVENT_IVW_RESULT == eventType) {
                 RecognizerResult reslut = ((RecognizerResult) obj.get(SpeechEvent.KEY_EVENT_IVW_RESULT));
@@ -288,20 +194,5 @@ public class WakeupController implements PluginRegistry.RequestPermissionsResult
         }
 
     };
-
-    @Override
-    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        // 必要的权限被授予后自动继续上次的操作
-        if (PermissionUtil.verifyAllPermissionRequestResult(grantResults)) {
-            if (requestCode == RQ_PRM_RECORD) {
-                compileGrammar();
-                startRecord(pendingResultCall);
-            }
-        } else {
-            // 权限被拒，抛出异常，flutter 层处理相关逻辑，显示友好的 UI 提示
-            pendingResultCall.error("PERMISSION_DENIED", "Required permissions denied", null);
-        }
-        return true;
-    }
 
 }

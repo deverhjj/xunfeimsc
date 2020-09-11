@@ -3,6 +3,7 @@ package com.huajianjiang.flutter.plugins.xunfeimsc;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
@@ -59,8 +60,6 @@ public class XunfeimscPlugin implements FlutterPlugin,
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
 
-  private ASRController speechRecognitionController;
-
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
     Log.d(TAG, "onAttachedToEngine");
@@ -92,6 +91,9 @@ public class XunfeimscPlugin implements FlutterPlugin,
     eventChannel.setStreamHandler(this);
     // 初始化 sdk
     Initializer.initSDK(context);
+    // 唤醒服务
+    Intent wakeupIntent = new Intent(context, WakeupService.class);
+    context.startService(wakeupIntent);
   }
 
   @Override
@@ -145,8 +147,8 @@ public class XunfeimscPlugin implements FlutterPlugin,
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
     activityPluginBinding = binding;
-    speechRecognitionController = new ASRController(binding.getActivity());
-    binding.addRequestPermissionsResultListener(speechRecognitionController);
+    speechRecognitionController = new WakeupController(binding.getActivity());
+    binding.addRequestPermissionsResultListener();
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
@@ -167,7 +169,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
-    activityPluginBinding.removeRequestPermissionsResultListener(speechRecognitionController);
+    activityPluginBinding.removeRequestPermissionsResultListener();
     activityPluginBinding = null;
     speechRecognitionController.destroy();
     speechRecognitionController = null;
