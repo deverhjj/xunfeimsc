@@ -91,9 +91,6 @@ public class XunfeimscPlugin implements FlutterPlugin,
     eventChannel.setStreamHandler(this);
     // 初始化 sdk
     Initializer.initSDK(context);
-    // 唤醒服务
-    Intent wakeupIntent = new Intent(context, WakeupService.class);
-    context.startService(wakeupIntent);
   }
 
   @Override
@@ -114,13 +111,13 @@ public class XunfeimscPlugin implements FlutterPlugin,
     Log.d(TAG, "onMethodCall: " + call.method);
     switch (call.method) {
       case CMD_SPEECH_RECOGNITION_START:
-        speechRecognitionController.startRecord(result);
+//        speechRecognitionController.startRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_STOP:
-        speechRecognitionController.stopRecord(result);
+//        speechRecognitionController.stopRecord(result);
         break;
       case CMD_SPEECH_RECOGNITION_CANCEL:
-        speechRecognitionController.cancel(result);
+//        speechRecognitionController.cancel(result);
         break;
       default:
         result.notImplemented();
@@ -132,13 +129,13 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onListen(Object arguments, EventChannel.EventSink events) {
     Log.d(TAG, "StreamHandler：onListen");
-    speechRecognitionController.setEventCall(events);
+//    speechRecognitionController.setEventCall(events);
   }
 
   @Override
   public void onCancel(Object arguments) {
     Log.d(TAG, "StreamHandler：onCancel");
-    speechRecognitionController.setEventCall(null);
+//    speechRecognitionController.setEventCall(null);
   }
 
   // 插件运行时关联的 activity 生命周期回调
@@ -147,11 +144,15 @@ public class XunfeimscPlugin implements FlutterPlugin,
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     Log.d(TAG, "onAttachedToActivity");
     activityPluginBinding = binding;
-    speechRecognitionController = new WakeupController(binding.getActivity());
-    binding.addRequestPermissionsResultListener();
+//    speechRecognitionController = new WakeupController(binding.getActivity());
+//    binding.addRequestPermissionsResultListener();
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
+
+    // 启动唤醒服务
+    Intent wakeupIntent = new Intent(binding.getActivity(), WakeupService.class);
+    binding.getActivity().startService(wakeupIntent);
   }
 
   @Override
@@ -169,10 +170,11 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
-    activityPluginBinding.removeRequestPermissionsResultListener();
+//    activityPluginBinding.removeRequestPermissionsResultListener();
+    activityPluginBinding.getActivity().stopService(new Intent(activityPluginBinding.getActivity(), WakeupService.class));
     activityPluginBinding = null;
-    speechRecognitionController.destroy();
-    speechRecognitionController = null;
+//    speechRecognitionController.destroy();
+//    speechRecognitionController = null;
     lifecycle.removeObserver(activityLifecycleObserver);
     activityLifecycleObserver = null;
     lifecycle = null;

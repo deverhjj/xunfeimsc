@@ -20,8 +20,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.flutter.Log;
-import io.flutter.plugin.common.EventChannel;
-import io.flutter.plugin.common.MethodChannel;
 
 /**
  * 讯飞语音离线命令词识别控制器
@@ -30,8 +28,7 @@ public class WakeupController {
     private static final String TAG = WakeupController.class.getSimpleName();
     private Context appContext;
     private VoiceWakeuper voiceWakeuper;
-
-    private EventChannel.EventSink eventCall;
+    private OnWakeupListener listener;
 
     public WakeupController(Context context) {
         appContext = context.getApplicationContext();
@@ -63,69 +60,50 @@ public class WakeupController {
         }
     }
 
-    public void setEventCall(EventChannel.EventSink eventCall) {
-        this.eventCall = eventCall;
-    }
-
-    private boolean checkState(MethodChannel.Result resultCall) {
-        boolean isOk = voiceWakeuper != null;
-        if (!isOk) {
-            resultCall.error("INIT_FAILED", "SpeechRecognition init failed.", null);
-        }
-        return !isOk;
+    public void setListener(OnWakeupListener listener) {
+        this.listener = listener;
     }
 
     /**
      * 开始录音并动态识别
-     * @param resultCall 本此调用结果回调
      */
-    public void startRecord(MethodChannel.Result resultCall) {
-        if (checkState(resultCall)) return;
+    public void startRecord() {
         if (voiceWakeuper.isListening()) {
-            resultCall.error("INVALID_STATE", "Can not start a new record when in recording.", null);
+            Log.e("INVALID_STATE", "Can not start a new record when in recording.");
             return;
         }
         int retCode = voiceWakeuper.startListening(wakeuperListener);
         if (retCode != ErrorCode.SUCCESS) {
-            resultCall.error("SPEECH_RECOGNITION_FAILED", "Failed to recognize speech.", retCode);
-        } else {
-            resultCall.success(null);
+            Log.e("SPEECH_RECOGNITION_FAILED", "Failed to recognize speech.");
         }
     }
 
     /**
      * 停止录音并识别
-     * @param resultCall 本此调用结果回调
      */
-    public void stopRecord(MethodChannel.Result resultCall) {
-        if (checkState(resultCall)) return;
+    public void stopRecord() {
         voiceWakeuper.stopListening();
-        resultCall.success(null);
     }
 
     /**
      * 取消音频记录和识别操作
-     * @param resultCall 本此调用结果回调
      */
-    public void cancel(MethodChannel.Result resultCall) {
-        if (checkState(resultCall)) return;
+    public void cancel() {
         voiceWakeuper.cancel();
-        resultCall.success(null);
     }
 
     /**
      * 释放所有的资源
      */
     public void destroy() {
-        eventCall = null;
         if (voiceWakeuper != null) {
             voiceWakeuper.cancel();
             voiceWakeuper.destroy();
             voiceWakeuper = null;
         }
+        listener = null;
+        appContext = null;
     }
-
-
 
     // 解析离线资源文件路径
     @SuppressWarnings("SameParameterValue")
@@ -139,18 +117,15 @@ public class WakeupController {
      * @param eventData 事件数据
      */
     private void dispatchSuccessEvent(String eventCode, Object eventData) {
-        if (eventCall == null) return;
         Log.d(TAG, "dispatchSuccessEvent: " + eventCode);
         Map<Object, Object> event = new HashMap<Object, Object>();
         event.put("eventCode", eventCode);
         event.put("eventData", eventData);
-        eventCall.success(event);
     }
 
     @SuppressWarnings("SameParameterValue")
     private void dispatchErrorEvent(String errorCode, String errorMessage, Object errorDetails) {
-        if (eventCall == null) return;
-        eventCall.error(errorCode, errorMessage, errorDetails);
+
     }
 
     private WakeuperListener wakeuperListener = new WakeuperListener() {
@@ -162,6 +137,9 @@ public class WakeupController {
             String jsonResult = result.getResultString();
             if (TextUtils.isEmpty(jsonResult)) return;
             Log.d(TAG, "onResult: " + jsonResult);
+            if (listener != null) {
+                listener.onWakeup();
+            }
         }
 
         @Override
@@ -194,5 +172,9 @@ public class WakeupController {
         }
 
     };
+
+    public interface OnWakeupListener {
+        void onWakeup();
+    }
 
 }
