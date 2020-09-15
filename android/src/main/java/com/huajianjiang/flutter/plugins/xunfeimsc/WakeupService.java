@@ -17,22 +17,30 @@
 package com.huajianjiang.flutter.plugins.xunfeimsc;
 
 import android.app.KeyguardManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
 import androidx.core.util.ObjectsCompat;
 
 import io.flutter.Log;
 
 public class WakeupService extends Service implements WakeupController.OnWakeupListener {
     private static final String TAG = WakeupService.class.getSimpleName();
-    private WakeupController controller;
+    private static final int MSC_NOTIFICATION_ID = 1;
+    private static final String CHANNEL_ID_MSC = BuildConfig.LIBRARY_PACKAGE_NAME + ".MSC";
+    private WakeupController wakeupController;
+    private ASRController asrController;
     private ScreenStateReceiver receiver;
 
     @Override
@@ -45,8 +53,32 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
         intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
         registerReceiver(receiver, intentFilter);
 
-        controller = new WakeupController(getApplicationContext());
-        controller.setListener(this);
+        // 初始化 sdk
+        Initializer.initSDK(this);
+        wakeupController = new WakeupController(getApplicationContext());
+        wakeupController.setListener(this);
+        asrController = new ASRController(getApplicationContext());
+
+        // 前台服务通知
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel notificationChannel = new NotificationChannel(CHANNEL_ID_MSC, "语音服务", NotificationManager.IMPORTANCE_LOW);
+            NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            notificationManager.createNotificationChannel(notificationChannel);
+        }
+        Notification notification = new NotificationCompat
+                .Builder(this, CHANNEL_ID_MSC)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build();
+        startForeground(MSC_NOTIFICATION_ID, notification);
+
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm.isScreenOn()) {
+            wakeupController.cancel();
+            asrController.startRecord();
+        } else {
+            asrController.cancel();
+            wakeupController.startRecord();
+        }
     }
 
     @Override
@@ -58,8 +90,16 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
     @Override
     public void onDestroy() {
         Log.d(TAG , "onDestroy");
-        controller.destroy();
+        wakeupController.setListener(null);
+        wakeupController.destroy();
+        wakeupController = null;
+        asrController.destroy();
+        asrController = null;
+        // 释放 sdk 占用的系统资源
+        Initializer.destroy();
         unregisterReceiver(receiver);
+        receiver = null;
+        stopForeground(true);
         super.onDestroy();
     }
 
@@ -97,10 +137,12 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
             if (ObjectsCompat.equals(action, Intent.ACTION_SCREEN_ON)) {
                 Log.d(TAG, "SCREEN_ON");
                 // 手动唤醒情况下取消语音唤醒操作
-                controller.cancel();
+                wakeupController.cancel();
+                asrController.startRecord();
             } else if (ObjectsCompat.equals(action, Intent.ACTION_SCREEN_OFF)) {
                 Log.d(TAG, "SCREEN_OFF");
-                controller.startRecord();
+                asrController.cancel();
+                wakeupController.startRecord();
             }
         }
     }

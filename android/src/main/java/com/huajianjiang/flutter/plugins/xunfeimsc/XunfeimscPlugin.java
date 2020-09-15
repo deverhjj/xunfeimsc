@@ -1,5 +1,6 @@
 package com.huajianjiang.flutter.plugins.xunfeimsc;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
@@ -22,13 +23,26 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
+import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
 /** 讯飞语音 Flutter 插件 */
 public class XunfeimscPlugin implements FlutterPlugin,
-        ActivityAware, MethodCallHandler, EventChannel.StreamHandler
-{
+        ActivityAware, MethodCallHandler, EventChannel.StreamHandler,
+        PluginRegistry.RequestPermissionsResultListener {
+
   private static final String TAG = XunfeimscPlugin.class.getSimpleName();
+  private static final int RQ_PRM_RECORD = 0x1;
+  /**
+   * 语音识别必要的 6.0+ 运行时权限
+   *
+   * <ul>音频记录</ul>
+   * <ul>音频文件写入外部存储</ul>
+   */
+  private static final String[] REQUIRED_PERMISSIONS = {
+          Manifest.permission.RECORD_AUDIO,
+          Manifest.permission.WRITE_EXTERNAL_STORAGE
+  };
 
   /**
    * 接收 flutter app 相关的业务调用通道
@@ -89,8 +103,6 @@ public class XunfeimscPlugin implements FlutterPlugin,
     methodChannel.setMethodCallHandler(this);
     eventChannel = new EventChannel(messenger, CHANNEL_EVENT_SPEECH_RECOGNITION);
     eventChannel.setStreamHandler(this);
-    // 初始化 sdk
-    Initializer.initSDK(context);
   }
 
   @Override
@@ -100,8 +112,6 @@ public class XunfeimscPlugin implements FlutterPlugin,
     methodChannel = null;
     eventChannel.setStreamHandler(null);
     eventChannel = null;
-    // 释放 sdk 占用的系统资源
-    Initializer.destroy();
 //  application.unregisterActivityLifecycleCallbacks(activityLifecycleObserver);
     application = null;
   }
@@ -145,14 +155,14 @@ public class XunfeimscPlugin implements FlutterPlugin,
     Log.d(TAG, "onAttachedToActivity");
     activityPluginBinding = binding;
 //    speechRecognitionController = new WakeupController(binding.getActivity());
-//    binding.addRequestPermissionsResultListener();
+    binding.addRequestPermissionsResultListener(this);
     activityLifecycleObserver = new ActivityLifecycleObserver();
     lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(binding);
     lifecycle.addObserver(activityLifecycleObserver);
-
-    // 启动唤醒服务
-    Intent wakeupIntent = new Intent(binding.getActivity(), WakeupService.class);
-    binding.getActivity().startService(wakeupIntent);
+    // 必要的权限验证
+    if (!requestPermissions(RQ_PRM_RECORD)) {
+      startMSCService();
+    }
   }
 
   @Override
@@ -170,14 +180,50 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
-//    activityPluginBinding.removeRequestPermissionsResultListener();
-    activityPluginBinding.getActivity().stopService(new Intent(activityPluginBinding.getActivity(), WakeupService.class));
+    activityPluginBinding.removeRequestPermissionsResultListener(this);
     activityPluginBinding = null;
 //    speechRecognitionController.destroy();
 //    speechRecognitionController = null;
     lifecycle.removeObserver(activityLifecycleObserver);
     activityLifecycleObserver = null;
     lifecycle = null;
+  }
+
+  private void startMSCService() {
+    // 启动唤醒服务
+    Intent wakeupIntent = new Intent(application, WakeupService.class);
+    application.startService(wakeupIntent);
+  }
+
+  /**
+   * 操作前的权限请求，如果没有被授权，自动请求权限
+   * @param requestCode 请求码
+   * @return 被拒 true，否则 false
+   */
+  @SuppressWarnings("SameParameterValue")
+  private boolean requestPermissions(int requestCode) {
+    Activity activity = activityPluginBinding.getActivity();
+    boolean permissionsDenied = !PermissionUtil
+            .verifyAllPermissions(activity, REQUIRED_PERMISSIONS);
+    if (permissionsDenied) {
+      PermissionUtil.requestPermissions(activity, requestCode, REQUIRED_PERMISSIONS);
+    }
+    return permissionsDenied;
+  }
+
+  @Override
+  public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    // 必要的权限被授予后自动继续上次的操作
+    if (requestCode == RQ_PRM_RECORD) {
+      if (PermissionUtil.verifyAllPermissionRequestResult(grantResults)) {
+        startMSCService();
+      } else {
+        // 权限被拒，抛出异常，flutter 层处理相关逻辑，显示友好的 UI 提示
+        Log.e("PERMISSION_DENIED", "Required permissions denied");
+      }
+      return true;
+    }
+    return false;
   }
 
   // activity 生命周期监听器
