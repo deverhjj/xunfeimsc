@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.flutter.Log;
+import io.flutter.plugin.common.EventChannel;
 
 /**
  * 讯飞语音离线命令词识别控制器
@@ -36,9 +37,15 @@ public class ASRController {
     private Context appContext;
     private SpeechRecognizer speechRecognizer;
 
+    private EventChannel.EventSink eventCall;
+
     public ASRController(Context context) {
         appContext = context.getApplicationContext();
         setup();
+    }
+
+    public void setEventCall(EventChannel.EventSink eventCall) {
+        this.eventCall = eventCall;
     }
 
     /**
@@ -80,6 +87,7 @@ public class ASRController {
      * 释放所有的资源
      */
     public void destroy() {
+        eventCall = null;
         if (speechRecognizer != null) {
             speechRecognizer.cancel();
             speechRecognizer.destroy();
@@ -219,15 +227,18 @@ public class ASRController {
      * @param eventData 事件数据
      */
     private void dispatchSuccessEvent(String eventCode, Object eventData) {
+        if (eventCall == null) return;
         Log.d(TAG, "dispatchSuccessEvent: " + eventCode);
         Map<Object, Object> event = new HashMap<Object, Object>();
         event.put("eventCode", eventCode);
         event.put("eventData", eventData);
+        eventCall.success(event);
     }
 
     @SuppressWarnings("SameParameterValue")
     private void dispatchErrorEvent(String errorCode, String errorMessage, Object errorDetails) {
-
+        if (eventCall == null) return;
+        eventCall.error(errorCode, errorMessage, errorDetails);
     }
 
     private RecognizerListener recognizerListener = new RecognizerListener() {

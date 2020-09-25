@@ -23,6 +23,7 @@ class _MyAppState extends State<MyApp> {
 
   StateSetter _stateSetter;
   SpeechRecognizeVolume _volume;
+  bool _dialogIsShow = false;
 
   @override
   void initState() {
@@ -48,7 +49,7 @@ class _MyAppState extends State<MyApp> {
 
           switch (state.event) {
             case SpeechRecognitionEvent.onStart:
-              showSpeechRecognitionDialog();
+              // showSpeechRecognitionDialog();
               break;
             case SpeechRecognitionEvent.onVolumeChanged:
               if (_stateSetter != null) {
@@ -57,21 +58,25 @@ class _MyAppState extends State<MyApp> {
               break;
             case SpeechRecognitionEvent.onResult:
               recognizedResult = state.data.result;
+              setState(() {
+                _recognizedText = recognizedResult;
+                // _recognizedText = '$_recognizedText$recognizedResult';
+              });
               break;
             case SpeechRecognitionEvent.onFinished:
-              Navigator.of(_context).pop();
+
+              // Navigator.of(_context).pop();
               break;
           }
 
-          setState(() {
-            _recognizedText = '$_recognizedText$recognizedResult';
-          });
         }, onError: (error) {
           showErrorBar(error);
         });
   }
 
   void showSpeechRecognitionDialog() {
+    if (_dialogIsShow) return;
+    _dialogIsShow = true;
     showDialog(
         context: _context,
         builder: (context) {
@@ -92,7 +97,10 @@ class _MyAppState extends State<MyApp> {
               },
             ),
           );
-        }).whenComplete(() => stopSpeechRecognition());
+        }).whenComplete(() {
+      stopSpeechRecognition();
+      _dialogIsShow = false;
+    });
   }
 
   void startSpeechRecognition() {

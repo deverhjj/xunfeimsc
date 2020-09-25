@@ -3,9 +3,13 @@ package com.huajianjiang.flutter.plugins.xunfeimsc;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Application;
+import android.app.Service;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.IBinder;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.DefaultLifecycleObserver;
@@ -74,6 +78,10 @@ public class XunfeimscPlugin implements FlutterPlugin,
   private Lifecycle lifecycle;
   private ActivityLifecycleObserver activityLifecycleObserver;
 
+  private EventChannel.EventSink eventcall;
+  private MSCService mscService;
+  private boolean bound;
+
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
     Log.d(TAG, "onAttachedToEngine");
@@ -108,6 +116,7 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
     Log.d(TAG, "onDetachedFromEngine");
+    eventcall = null;
     methodChannel.setMethodCallHandler(null);
     methodChannel = null;
     eventChannel.setStreamHandler(null);
@@ -139,12 +148,19 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onListen(Object arguments, EventChannel.EventSink events) {
     Log.d(TAG, "StreamHandler：onListen");
+    eventcall = events;
+    if (bound) {
+        mscService.getAsrController().setEventCall(events);
+    }
 //    speechRecognitionController.setEventCall(events);
   }
 
   @Override
   public void onCancel(Object arguments) {
     Log.d(TAG, "StreamHandler：onCancel");
+    if (bound) {
+      mscService.getAsrController().setEventCall(null);
+    }
 //    speechRecognitionController.setEventCall(null);
   }
 
@@ -180,6 +196,10 @@ public class XunfeimscPlugin implements FlutterPlugin,
   @Override
   public void onDetachedFromActivity() {
     Log.d(TAG, "onDetachedFromActivity");
+    if (bound) {
+       application.unbindService(mscServiceConnection);
+       bound = false;
+    }
     activityPluginBinding.removeRequestPermissionsResultListener(this);
     activityPluginBinding = null;
 //    speechRecognitionController.destroy();
@@ -190,9 +210,10 @@ public class XunfeimscPlugin implements FlutterPlugin,
   }
 
   private void startMSCService() {
-    // 启动唤醒服务
-    Intent wakeupIntent = new Intent(application, WakeupService.class);
-    application.startService(wakeupIntent);
+    // 启动语音服务
+    Intent mscIntent = new Intent(application, MSCService.class);
+    application.startService(mscIntent);
+    application.bindService(mscIntent, mscServiceConnection, Service.BIND_AUTO_CREATE);
   }
 
   /**
@@ -225,6 +246,25 @@ public class XunfeimscPlugin implements FlutterPlugin,
     }
     return false;
   }
+
+  private ServiceConnection mscServiceConnection = new ServiceConnection() {
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder service) {
+      Log.d(TAG, "onServiceConnected");
+      MSCService.MSCBinder mscBinder = (MSCService.MSCBinder) service;
+      mscService = mscBinder.getService();
+      bound = true;
+      if (eventcall != null) {
+        mscService.getAsrController().setEventCall(eventcall);
+      }
+    }
+
+    @Override
+    public void onServiceDisconnected(ComponentName name) {
+      Log.d(TAG, "onServiceDisconnected");
+      bound = false;
+    }
+  };
 
   // activity 生命周期监听器
   private static class ActivityLifecycleObserver

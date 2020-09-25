@@ -25,6 +25,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -35,10 +36,13 @@ import androidx.core.util.ObjectsCompat;
 
 import io.flutter.Log;
 
-public class WakeupService extends Service implements WakeupController.OnWakeupListener {
-    private static final String TAG = WakeupService.class.getSimpleName();
+public class MSCService extends Service implements WakeupController.OnWakeupListener {
+    private static final String TAG = MSCService.class.getSimpleName();
     private static final int MSC_NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID_MSC = BuildConfig.LIBRARY_PACKAGE_NAME + ".MSC";
+
+    private final MSCBinder binder = new MSCBinder();
+
     private WakeupController wakeupController;
     private ASRController asrController;
     private ScreenStateReceiver receiver;
@@ -106,7 +110,20 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        Log.d(TAG , "onBind");
+        return binder;
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        Log.d(TAG , "onUnbind");
+        return true;
+    }
+
+    @Override
+    public void onRebind(Intent intent) {
+        Log.d(TAG , "onRebind");
+        super.onRebind(intent);
     }
 
     private void turnScreenOn() {
@@ -130,6 +147,10 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
         turnScreenOn();
     }
 
+    public ASRController getAsrController() {
+        return asrController;
+    }
+
     private class ScreenStateReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -144,6 +165,12 @@ public class WakeupService extends Service implements WakeupController.OnWakeupL
                 asrController.cancel();
                 wakeupController.startRecord();
             }
+        }
+    }
+
+    public class MSCBinder extends Binder {
+        public MSCService getService() {
+            return MSCService.this;
         }
     }
 
